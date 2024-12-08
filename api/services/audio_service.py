@@ -65,6 +65,56 @@ class AudioService:
 
         return {"text": model_instance.invoke_speech2text(file=buffer, user=end_user)}
 
+    @staticmethod
+    def _clean_text_for_tts(text: str) -> str:
+        """
+        Clean text by removing markdown syntax and other unwanted elements before TTS processing.
+
+        :param text: The input text that may contain markdown
+        :return: Cleaned text suitable for TTS
+        """
+        import re
+
+        if not text:
+            return ""
+
+        # Replace <br> tags with newlines first
+        text = re.sub(r"<br\s*/?>(?:\s*<br\s*/?>)*", "\n", text, flags=re.IGNORECASE)
+
+        # Remove any other HTML tags
+        text = re.sub(r"<[^>]+>", "", text)
+
+        # Remove image markdown syntax
+        text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+
+        # Remove URL markdown syntax while keeping the text
+        text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
+
+        # Remove headers markdown
+        text = re.sub(r"^#+\s+", "", text, flags=re.MULTILINE)
+
+        # Remove bold/italic markdown
+        text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+        text = re.sub(r"\*(.*?)\*", r"\1", text)
+        text = re.sub(r"__(.*?)__", r"\1", text)
+        text = re.sub(r"_(.*?)_", r"\1", text)
+
+        # Remove code blocks and inline code
+        text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        text = re.sub(r"`(.*?)`", r"\1", text)
+
+        # Remove blockquotes
+        text = re.sub(r"^\s*>\s+", "", text, flags=re.MULTILINE)
+
+        # Remove horizontal rules
+        text = re.sub(r"^\s*[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+
+        # Clean up extra whitespace
+        text = re.sub(r"\n\s*\n", "\n\n", text)
+        text = text.strip()
+
+        return text
+
     @classmethod
     def transcript_tts(
         cls,
@@ -82,6 +132,9 @@ class AudioService:
         from extensions.ext_database import db
 
         def invoke_tts(text_content: str, app_model, voice: Optional[str] = None):
+            # Clean the text before processing
+            text_content = cls._clean_text_for_tts(text_content)
+
             with app.app_context():
                 if app_model.mode in {AppMode.ADVANCED_CHAT.value, AppMode.WORKFLOW.value}:
                     workflow = app_model.workflow
